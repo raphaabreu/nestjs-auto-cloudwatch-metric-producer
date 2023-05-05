@@ -159,7 +159,7 @@ export class CloudWatchMetricProducer implements OnModuleInit, OnModuleDestroy {
         collector = new StatisticSetCollector();
         break;
       case 'distinctValues':
-        collector = new ValuesCollector();
+        collector = new ValuesCollector(() => this.flush());
         break;
       case 'sum':
         collector = new SumCollector();
@@ -235,10 +235,43 @@ export class CloudWatchMetricProducer implements OnModuleInit, OnModuleDestroy {
     this.logger.log('Flushing ${metricDatumCount} metrics to CloudWatch...', metricDatumCount);
 
     // Send all the commands in parallel
+    const promise = Promise.all(commands.map((command) => this.send(command)));
+
+    this.promiseCollector.add(promise);
+
+    await this.promiseCollector.pending();
+  }
+
+  private async send(command: PutMetricDataCommand) {
     try {
-      await Promise.all(commands.map(this.promiseCollector.wrap((command) => this.client.send(command))));
+      await this.client.send(command);
     } catch (error) {
       this.logger.error('Error sending metrics to CloudWatch', error);
+
+      if (error.name === '413' && command.input.MetricData.length > 1) {
+        this.logger.log('Splitting ${metricDatumCount} metric data to try again', command.input.MetricData.length);
+
+        const metricData = command.input.MetricData;
+        const middleIndex = Math.ceil(metricData.length / 2);
+
+        // Split the metric data into two parts
+        const firstHalf = metricData.slice(0, middleIndex);
+        const secondHalf = metricData.slice(middleIndex);
+
+        // Create new commands with the split metric data
+        const firstHalfCommand = new PutMetricDataCommand({
+          ...command.input,
+          MetricData: firstHalf,
+        });
+
+        const secondHalfCommand = new PutMetricDataCommand({
+          ...command.input,
+          MetricData: secondHalf,
+        });
+
+        // Send the new commands
+        await Promise.all([this.send(firstHalfCommand), this.send(secondHalfCommand)]);
+      }
     }
   }
 }

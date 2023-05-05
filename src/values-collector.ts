@@ -4,6 +4,8 @@ import { MetricCollector } from './cloudwatch-metric-producer';
 export class ValuesCollector implements MetricCollector {
   private data: { [key: string]: number } = {};
 
+  constructor(private readonly flushCallback: () => void) {}
+
   collect(value: number | number[]) {
     if (Array.isArray(value)) {
       value.forEach((v) => this.collect(v));
@@ -12,6 +14,10 @@ export class ValuesCollector implements MetricCollector {
 
     const key = value.toFixed(3);
     this.data[key] = (this.data[key] ?? 0) + 1;
+
+    if (Object.keys(this.data).length === 150) {
+      this.flushCallback();
+    }
   }
 
   getMetricData(): Partial<MetricDatum>[] {
