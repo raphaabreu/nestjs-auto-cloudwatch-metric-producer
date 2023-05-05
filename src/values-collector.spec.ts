@@ -2,11 +2,9 @@ import { ValuesCollector } from './values-collector';
 
 describe('ValuesCollector', () => {
   let valuesCollector: ValuesCollector;
-  let flushCallback: jest.Func;
 
   beforeEach(() => {
-    flushCallback = jest.fn();
-    valuesCollector = new ValuesCollector(flushCallback);
+    valuesCollector = new ValuesCollector();
   });
 
   describe('collect', () => {
@@ -93,7 +91,6 @@ describe('ValuesCollector', () => {
       expect(metricData[1].Values.length).toBe(150);
       expect(metricData[0].Counts.every((count) => count === 1)).toBeTruthy();
       expect(metricData[1].Counts.every((count) => count === 1)).toBeTruthy();
-      expect(flushCallback).toHaveBeenCalledTimes(1);
     });
   });
 });

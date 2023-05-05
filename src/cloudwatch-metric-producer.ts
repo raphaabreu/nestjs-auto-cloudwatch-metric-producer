@@ -159,7 +159,7 @@ export class CloudWatchMetricProducer implements OnModuleInit, OnModuleDestroy {
         collector = new StatisticSetCollector();
         break;
       case 'distinctValues':
-        collector = new ValuesCollector(() => this.flush());
+        collector = new ValuesCollector();
         break;
       case 'sum':
         collector = new SumCollector();
@@ -219,9 +219,21 @@ export class CloudWatchMetricProducer implements OnModuleInit, OnModuleDestroy {
 
       // Split the metric data into chunks of 1000 and create a command for each chunk
       while (metricData.length > 0) {
+        let byteSize = 0;
+        const data: MetricDatum[] = [];
+        while (metricData.length > 0) {
+          const datum = metricData.shift();
+          data.push(datum);
+          byteSize += JSON.stringify(datum).length;
+
+          if (byteSize > 100 * 1024) {
+            break;
+          }
+        }
+
         commands.push(
           new PutMetricDataCommand({
-            MetricData: metricData.splice(0, 1000),
+            MetricData: data,
             Namespace: namespace,
           }),
         );
