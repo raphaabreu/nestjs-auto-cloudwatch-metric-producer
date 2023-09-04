@@ -13,12 +13,19 @@ import { SumCollector } from './sum-collector';
 import { StatisticSetCollector } from './statisticset-collector';
 import { PromiseCollector } from '@raphaabreu/promise-collector';
 
+const MAX_VERBOSE_LOG_COUNT = 10;
+
 export interface CloudWatchMetricProducerOptions {
   maxBatchIntervalMs?: number;
   client?: CloudWatchClient;
   metrics?: (string | CloudWatchMetricOptions)[];
   defaults?: Omit<CloudWatchMetricOptions, 'metricName'>;
+  verboseBeginning?: boolean;
 }
+
+const defaultOptions: Partial<CloudWatchMetricProducerOptions> = {
+  verboseBeginning: true,
+};
 
 export interface CloudWatchMetricOptions {
   collectionId?: string;
@@ -48,10 +55,16 @@ export class CloudWatchMetricProducer implements OnModuleInit, OnModuleDestroy {
     };
   } = {};
 
+  private readonly options: CloudWatchMetricProducerOptions;
+
   private logger = new StructuredLogger(CloudWatchMetricProducer.name);
   private readonly promiseCollector = new PromiseCollector();
 
-  constructor(private readonly options: CloudWatchMetricProducerOptions) {
+  private verboseLogCount = 0;
+
+  constructor(options: CloudWatchMetricProducerOptions) {
+    this.options = { ...defaultOptions, ...options };
+
     this.maxBatchIntervalMs = options.maxBatchIntervalMs ?? 55000;
 
     for (const value of options.metrics || []) {
@@ -244,7 +257,12 @@ export class CloudWatchMetricProducer implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    this.logger.log('Flushing ${metricDatumCount} metrics to CloudWatch...', metricDatumCount);
+    this.logger[this.verboseLoggingEnabled ? 'log' : 'debug'](
+      'Flushing ${metricDatumCount} metrics to CloudWatch...',
+      metricDatumCount,
+    );
+
+    this.countVerboseLogging();
 
     // Send all the commands in parallel
     const promise = Promise.all(commands.map((command) => this.send(command)));
@@ -261,7 +279,7 @@ export class CloudWatchMetricProducer implements OnModuleInit, OnModuleDestroy {
       this.logger.error('Error sending metrics to CloudWatch', error);
 
       if (error.name === '413' && command.input.MetricData.length > 1) {
-        this.logger.log('Splitting ${metricDatumCount} metric data to try again', command.input.MetricData.length);
+        this.logger.debug('Splitting ${metricDatumCount} metric data to try again', command.input.MetricData.length);
 
         const metricData = command.input.MetricData;
         const middleIndex = Math.ceil(metricData.length / 2);
@@ -283,6 +301,19 @@ export class CloudWatchMetricProducer implements OnModuleInit, OnModuleDestroy {
 
         // Send the new commands
         await Promise.all([this.send(firstHalfCommand), this.send(secondHalfCommand)]);
+      }
+    }
+  }
+
+  private verboseLoggingEnabled() {
+    return this.options.verboseBeginning && this.verboseLogCount < MAX_VERBOSE_LOG_COUNT;
+  }
+
+  private countVerboseLogging() {
+    if (this.verboseLoggingEnabled()) {
+      this.verboseLogCount++;
+      if (this.verboseLogCount === MAX_VERBOSE_LOG_COUNT) {
+        this.logger.log('Success messages will be logged as debug from now on');
       }
     }
   }
