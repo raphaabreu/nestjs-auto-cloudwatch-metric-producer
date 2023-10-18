@@ -30,6 +30,10 @@ export class StatisticSetCollector implements MetricCollector {
     const set = this.statisticSet;
     this.statisticSet = null;
 
+    if (!set) {
+      return [];
+    }
+
     return [
       {
         StatisticValues: set,
