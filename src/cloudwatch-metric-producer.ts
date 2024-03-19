@@ -257,7 +257,7 @@ export class CloudWatchMetricProducer implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    this.logger[this.verboseLoggingEnabled ? 'log' : 'debug'](
+    this.logger[this.verboseLoggingEnabled() ? 'log' : 'debug'](
       'Flushing ${metricDatumCount} metrics to CloudWatch...',
       metricDatumCount,
     );
